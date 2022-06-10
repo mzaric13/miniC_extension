@@ -204,8 +204,59 @@ assignment_statement
         else
           if(get_type(idx) != get_type($3))
             err("incompatible types in assignment");
-        gen_mov($3, idx);
+	if (get_atr1(idx) > 1 && array_idx > 0) {
+		int vars = 1;
+		int var_pos = 1;
+		while (vars <= var_num) {
+			int idx1 = get_var_by_var_num(vars);
+			if (idx1 == idx) break;
+			else {
+				int atr2 = get_atr2(idx1);
+				if (atr2 != NO_ATR)	{
+					var_pos += atr2;
+				}else {
+					var_pos += 1;
+				}
+			}
+			vars++;
+		}
+		gen_mov($3, -var_pos);
+	}else 
+        	gen_mov($3, idx);
       }
+  | _ID _SLBRACKET literal _SRBRACKET _ASSIGN num_exp _SEMICOLON
+	{
+		int idx = lookup_symbol($1, ARRAY);
+		if(idx == NO_INDEX)
+			err("array %s not declared", $1);
+		else
+			if (get_type(idx) != get_type($6))
+				err("incompatibile types in assignment");
+		if (atoi(get_name($3)) >= get_atr2(idx))
+			err("index out of range");
+		int index_on_stack = atoi(get_name($3));
+		if (get_atr1(idx) > 1) {
+			int vars = 1;
+			int array_position = 1;
+			while (vars <= var_num) {
+				int idx1 = get_var_by_var_num(vars);
+				if (idx1 == idx) break;
+				else {
+					int atr2 = get_atr2(idx1);
+					if (atr2 != NO_ATR)	{
+						array_position += atr2;
+					}else {
+						array_position += 1;
+					}
+				}
+				vars++;
+			}
+			index_on_stack += array_position;
+		}else {
+			index_on_stack += 1;
+		}
+		gen_mov($6, -index_on_stack);
+	}
   ;
 
 num_exp

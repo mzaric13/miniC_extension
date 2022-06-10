@@ -4,6 +4,8 @@ func:
 		MOV 	%15,%14
 		SUBS	%15,$24,%15
 @func_body:
+		MOV 	$1,-4(%14)
+		MOV 	$2,-8(%14)
 		MOV 	$0,%13
 		JMP 	@func_exit
 @func_exit:
