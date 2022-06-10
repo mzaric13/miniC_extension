@@ -1,0 +1,7 @@
+lex.yy.c
+micko
+micko.output
+micko.tab.c
+micko.tab.h
+.make.*
+
