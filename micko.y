@@ -227,6 +227,7 @@ assignment_statement
 		gen_mov($3, -var_pos);
 	}else 
         	gen_mov($3, idx);
+	type_check = 0;
       }
   | _ID _SLBRACKET literal _SRBRACKET _ASSIGN num_exp _SEMICOLON
 	{
@@ -260,6 +261,7 @@ assignment_statement
 			index_on_stack += 1;
 		}
 		gen_mov($6, -index_on_stack);
+		type_check = 0;
 	}
   ;
 
@@ -268,9 +270,25 @@ num_exp
 
   | num_exp _AROP exp
       {
-        if(get_type($1) != get_type($3))
-          err("invalid operands: arithmetic operation");
-        int t1 = get_type($1);    
+        int t1;   
+	if (type_check == 0) {
+		if(get_type($1) != get_type($3))
+          		err("invalid operands: arithmetic operation");
+		t1 = get_type($1);
+	}else {
+		int i, j;
+		int errors = 0;
+		for (i = 0; i < type_check - 1; i++) {
+			for (j = i + 1; j < type_check; j++) {
+				if (get_type(array_type_check[i]) != get_type(array_type_check[j])) {
+					errors++;
+					err("types not compatibile");
+				}
+			}	
+		}
+		if (errors == 0)
+			t1 = get_type(array_type_check[0]);
+	}        
         code("\n\t\t%s\t", ar_instructions[$2 + (t1 - 1) * AROP_NUMBER]);
         gen_sym_name($1);
         code(",");
@@ -289,9 +307,29 @@ exp
 
   | _ID
       {
-        $$ = lookup_symbol($1, VAR|PAR);
-        if($$ == NO_INDEX)
+        int idx = lookup_symbol($1, VAR|PAR);
+	if(idx == NO_INDEX)
           err("'%s' undeclared", $1);
+	if (get_atr1(idx) > 1 && array_idx > 0) {
+		int vars = 1;
+		int var_pos = 1;
+		while (vars <= var_num) {
+			int idx1 = get_var_by_var_num(vars);
+			if (idx1 == idx) break;
+			else {
+				int atr2 = get_atr2(idx1);
+				if (atr2 != NO_ATR)	{
+					var_pos += atr2;
+				}else {
+					var_pos += 1;
+				}
+			}
+			vars++;
+		}
+		$$ = -var_pos;
+	}else {
+		$$ = idx;
+	}       
       }
 
   | function_call
@@ -301,7 +339,41 @@ exp
       }
   
   | _LPAREN num_exp _RPAREN
-      { $$ = $2; }
+      { $$ = $2; 
+	type_check = 0;
+      }
+  | _ID _SLBRACKET literal _SRBRACKET
+	{
+		int arr_idx = lookup_symbol($1, ARRAY);
+		if (arr_idx == NO_INDEX)
+			err("array not defined: %s", $1);
+		if (atoi(get_name($3)) >= get_atr2(arr_idx))
+			err("index out of range");
+		int index_on_stack = atoi(get_name($3));
+		if (get_atr1(arr_idx) > 1) {
+			int vars = 1;
+			int array_position = 1;
+			while (vars <= var_num) {
+				int idx1 = get_var_by_var_num(vars);
+				if (idx1 == arr_idx) break;
+				else {
+					int atr2 = get_atr2(idx1);
+					if (atr2 != NO_ATR)	{
+						array_position += atr2;
+					}else {
+						array_position += 1;
+					}
+				}
+				vars++;
+			}
+			index_on_stack += array_position;
+		}else {
+			index_on_stack += 1;
+		}
+		$$ = -index_on_stack;
+		array_type_check[type_check] = arr_idx;
+		type_check++;
+	}
   ;
 
 literal
@@ -323,7 +395,7 @@ function_call
       {
         if(get_atr1(fcall_idx) != $4)
           err("wrong number of arguments");
-        code("\n\t\t\tCALL\t%s", get_name(fcall_idx));
+        code("\n\t\tCALL\t%s", get_name(fcall_idx));
         if($4 > 0)
           code("\n\t\t\tADDS\t%%15,$%d,%%15", $4 * 4);
         set_type(FUN_REG, get_type(fcall_idx));
@@ -374,22 +446,81 @@ if_part
   ;
 
 rel_exp
-  : num_exp _RELOP num_exp
+  : num_exp 
+	{
+		type_check = 0;
+	}
+   _RELOP num_exp
       {
-        if(get_type($1) != get_type($3))
+        if(get_type($1) != get_type($4))
           err("invalid operands: relational operator");
-        $$ = $2 + ((get_type($1) - 1) * RELOP_NUMBER);
-        gen_cmp($1, $3);
+        $$ = $3 + ((get_type($1) - 1) * RELOP_NUMBER);
+        gen_cmp($1, $4);
+	type_check = 0;
       }
   ;
 
 return_statement
   : _RETURN num_exp _SEMICOLON
       {
-        if(get_type(fun_idx) != get_type($2))
-          err("incompatible types in return");
-        gen_mov($2, FUN_REG);
-        code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));        
+	if ($2 < 0) {
+		int vars = 1;
+		int var_pos = 1;
+		int idx1;
+		while (vars <= var_num) {
+			idx1 = get_var_by_var_num(vars);
+			int atr2 = get_atr2(idx1);
+			if (atr2 != NO_ATR)	{
+				var_pos += atr2;
+				if (-var_pos < $2) {
+					break;				
+				}
+			}else {
+				var_pos += 1;
+			}
+			vars++;
+		}
+		if (get_type(idx1) != get_type(fun_idx))
+			err("incompatibile types in return");
+		gen_mov($2, FUN_REG);
+		code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
+	} else {
+		unsigned kind = get_kind($2);
+		if (kind == VAR) {
+			int index_on_stack = 0;
+			if (get_atr1($2) > 1) {
+				int vars = 1;
+				int var_pos = 1;
+				while (vars <= var_num) {
+					int idx1 = get_var_by_var_num(vars);
+					if (idx1 == $2) break;
+					else {
+						int atr2 = get_atr2(idx1);
+						if (atr2 != NO_ATR)	{
+							var_pos += atr2;
+						}else {
+							var_pos += 1;
+						}
+					}
+					vars++;
+				}
+				index_on_stack += var_pos;
+			}else {
+				index_on_stack += 1;
+			}
+			if(get_type(fun_idx) != get_type($2))
+		  		err("incompatible types in return");
+			gen_mov(-index_on_stack, FUN_REG);
+			code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));	
+		}
+		else {
+			if(get_type(fun_idx) != get_type($2))
+		 	 	err("incompatible types in return");
+			gen_mov($2, FUN_REG);
+			code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
+		}	  
+	}
+	      
       }
   ;
 
@@ -425,7 +556,6 @@ for_each
 				}
 				int i;
 				for (i = 0; i < get_atr2(arr_idx); i++) {
-					code("\n\t\t@element%d:", i);
 					code("\n\t\t\tPUSH\t-%d(%%14)", (array_pos + i) * 4);
 					code("\n\t\t\tCALL\t%s", get_name(func_idx));
           				code("\n\t\t\tADDS\t%%15,$4,%%15");

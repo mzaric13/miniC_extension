@@ -198,7 +198,7 @@ void init_symtab(void) {
 int get_var_by_var_num(int var_num) {
 	int i;
   	for(i = first_empty - 1; i > FUN_REG; i--) {
-    		if ( symbol_table[i].atr1 == var_num && (symbol_table[i].kind == 0x10 || symbol_table[i].kind == 0x80 )) return i;
+    		if ( symbol_table[i].atr1 == var_num && (symbol_table[i].kind == 0x10 || symbol_table[i].kind == 0x40 )) return i;
   	}
 	return -1;
 }

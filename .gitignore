@@ -4,4 +4,6 @@ micko.output
 micko.tab.c
 micko.tab.h
 .make.*
+test-sanity.asm
+
 
