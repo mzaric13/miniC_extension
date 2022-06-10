@@ -22,6 +22,8 @@
   int array_elem_num = 0;
   int array_idx = 0;
   int arrays[1000];
+  int type_check = 0;
+  int array_type_check[1000];
   FILE *output;
 %}
 
@@ -47,6 +49,7 @@
 %token _SEMICOLON
 %token _COMMA
 %token _DOT
+%token _FOREACH
 %token <i> _AROP
 %token <i> _RELOP
 
@@ -189,6 +192,7 @@ statement
   | assignment_statement
   | if_statement
   | return_statement
+  | for_each
   ;
 
 compound_statement
@@ -387,6 +391,51 @@ return_statement
         gen_mov($2, FUN_REG);
         code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));        
       }
+  ;
+
+for_each
+  : _ID _DOT _FOREACH _LPAREN _ID _RPAREN _SEMICOLON
+	{
+		int arr_idx = lookup_symbol($1, ARRAY);
+		if (arr_idx == NO_INDEX)
+			err("Array not defined: %s", $1);
+		int func_idx = lookup_symbol($5, FUN);
+		if (func_idx == NO_INDEX)
+			err("Function not declared: %s", $5);
+		else {
+			if (get_type(func_idx) != get_type(arr_idx) || get_atr2(func_idx) != get_type(arr_idx))
+				err("Types not compatibile");
+			else {
+				int array_pos = 1;
+				if (get_atr1(arr_idx) > 1) {
+					int vars = 1;
+					while (vars <= var_num) {
+						int idx1 = get_var_by_var_num(vars);
+						if (idx1 == arr_idx) break;
+						else {
+							int atr2 = get_atr2(idx1);
+							if (atr2 != NO_ATR)	{
+								array_pos += atr2;
+							}else {
+								array_pos += 1;
+							}
+						}
+						vars++;
+					}
+				}
+				int i;
+				for (i = 0; i < get_atr2(arr_idx); i++) {
+					code("\n\t\t@element%d:", i);
+					code("\n\t\t\tPUSH\t-%d(%%14)", (array_pos + i) * 4);
+					code("\n\t\t\tCALL\t%s", get_name(func_idx));
+          				code("\n\t\t\tADDS\t%%15,$4,%%15");
+        				set_type(FUN_REG, get_type(func_idx));
+					code("\n\t\t\tMOV\t%%13,-%d(%%14)", (array_pos + i) * 4);
+				}
+			}
+		}
+		
+	}
   ;
 
 %%
