@@ -19,11 +19,15 @@
   int fun_idx = -1;
   int fcall_idx = -1;
   int lab_num = -1;
+
   int array_elem_num = 0;
   int array_idx = 0;
   int arrays[1000];
   int type_check = 0;
   int array_type_check[1000];
+
+  int array_decl_cnt = 0;
+  int array_decl_vars[1000];
   FILE *output;
 %}
 
@@ -122,7 +126,21 @@ body
 				places += get_atr2(arrays[i]);
 			}
 			places -= array_idx;
-			code("\n\t\tSUBS\t%%15,$%d,%%15", 4*places);		
+			code("\n\t\tSUBS\t%%15,$%d,%%15", 4*places);
+			i = 0;
+			int j = 0;
+			int k = 0;
+			while(i < array_idx) {
+				int arr_idx = get_variable_stack_position(var_num, arrays[i]);
+				while (j < get_atr2(arrays[i]) && j + k < array_decl_cnt) {
+					gen_mov(array_decl_vars[j + k], -(arr_idx + j));
+					j++;
+				}
+				k = j;
+				j = 0;
+				i++;
+			}
+			array_decl_cnt = 0;		
 		}else {
 			code("\n\t\tSUBS\t%%15,$%d,%%15", 4*var_num);
 		}
@@ -175,10 +193,14 @@ literal_list
   : literal
 	{
 		array_elem_num++;
+		array_decl_vars[array_decl_cnt] = $1;
+		array_decl_cnt++;
 	}
   | literal_list _COMMA literal
 	{
 		array_elem_num++;
+		array_decl_vars[array_decl_cnt] = $3;
+		array_decl_cnt++;
 	}
   ;
 
@@ -209,21 +231,7 @@ assignment_statement
           if(get_type(idx) != get_type($3))
             err("incompatible types in assignment");
 	if (get_atr1(idx) > 1 && array_idx > 0) {
-		int vars = 1;
-		int var_pos = 1;
-		while (vars <= var_num) {
-			int idx1 = get_var_by_var_num(vars);
-			if (idx1 == idx) break;
-			else {
-				int atr2 = get_atr2(idx1);
-				if (atr2 != NO_ATR)	{
-					var_pos += atr2;
-				}else {
-					var_pos += 1;
-				}
-			}
-			vars++;
-		}
+		int var_pos = get_variable_stack_position(var_num, idx);
 		gen_mov($3, -var_pos);
 	}else 
         	gen_mov($3, idx);
@@ -239,27 +247,7 @@ assignment_statement
 				err("incompatibile types in assignment");
 		if (atoi(get_name($3)) >= get_atr2(idx))
 			err("index out of range");
-		int index_on_stack = atoi(get_name($3));
-		if (get_atr1(idx) > 1) {
-			int vars = 1;
-			int array_position = 1;
-			while (vars <= var_num) {
-				int idx1 = get_var_by_var_num(vars);
-				if (idx1 == idx) break;
-				else {
-					int atr2 = get_atr2(idx1);
-					if (atr2 != NO_ATR)	{
-						array_position += atr2;
-					}else {
-						array_position += 1;
-					}
-				}
-				vars++;
-			}
-			index_on_stack += array_position;
-		}else {
-			index_on_stack += 1;
-		}
+		int index_on_stack = get_stack_position_of_array_element(var_num, idx, $3);
 		gen_mov($6, -index_on_stack);
 		type_check = 0;
 	}
@@ -311,21 +299,7 @@ exp
 	if(idx == NO_INDEX)
           err("'%s' undeclared", $1);
 	if (get_atr1(idx) > 1 && array_idx > 0) {
-		int vars = 1;
-		int var_pos = 1;
-		while (vars <= var_num) {
-			int idx1 = get_var_by_var_num(vars);
-			if (idx1 == idx) break;
-			else {
-				int atr2 = get_atr2(idx1);
-				if (atr2 != NO_ATR)	{
-					var_pos += atr2;
-				}else {
-					var_pos += 1;
-				}
-			}
-			vars++;
-		}
+		int var_pos = get_variable_stack_position(var_num, idx);
 		$$ = -var_pos;
 	}else {
 		$$ = idx;
@@ -349,27 +323,7 @@ exp
 			err("array not defined: %s", $1);
 		if (atoi(get_name($3)) >= get_atr2(arr_idx))
 			err("index out of range");
-		int index_on_stack = atoi(get_name($3));
-		if (get_atr1(arr_idx) > 1) {
-			int vars = 1;
-			int array_position = 1;
-			while (vars <= var_num) {
-				int idx1 = get_var_by_var_num(vars);
-				if (idx1 == arr_idx) break;
-				else {
-					int atr2 = get_atr2(idx1);
-					if (atr2 != NO_ATR)	{
-						array_position += atr2;
-					}else {
-						array_position += 1;
-					}
-				}
-				vars++;
-			}
-			index_on_stack += array_position;
-		}else {
-			index_on_stack += 1;
-		}
+		int index_on_stack = get_stack_position_of_array_element(var_num, arr_idx, $3);
 		$$ = -index_on_stack;
 		array_type_check[type_check] = arr_idx;
 		type_check++;
