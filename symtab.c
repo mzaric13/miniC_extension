@@ -203,3 +203,23 @@ int get_var_by_var_num(int var_num) {
 	return -1;
 }
 
+int get_index_from_stack_index(int var_num, int stack_index) {
+	int vars = 1;
+	int var_pos = 1;
+	int idx1;
+	while (vars <= var_num) {
+		idx1 = get_var_by_var_num(vars);
+		int atr2 = get_atr2(idx1);
+		if (atr2 != NO_ATR)	{
+			var_pos += atr2;
+			if (-var_pos < stack_index) {
+				break;				
+			}
+		}else {
+			var_pos += 1;
+		}
+		vars++;
+	}
+	return idx1;
+}
+

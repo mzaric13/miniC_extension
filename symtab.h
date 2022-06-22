@@ -57,4 +57,7 @@ void init_symtab(void);
 // vraca varijablu na osnovu var_num
 int get_var_by_var_num(int var_num);
 
+// vraca indeks u tabeli na osnovu indeksa na steku
+int get_index_from_stack_index(int var_num, int stack_index);
+
 #endif

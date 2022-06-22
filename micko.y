@@ -418,23 +418,8 @@ return_statement
   : _RETURN num_exp _SEMICOLON
       {
 	if ($2 < 0) {
-		int vars = 1;
-		int var_pos = 1;
-		int idx1;
-		while (vars <= var_num) {
-			idx1 = get_var_by_var_num(vars);
-			int atr2 = get_atr2(idx1);
-			if (atr2 != NO_ATR)	{
-				var_pos += atr2;
-				if (-var_pos < $2) {
-					break;				
-				}
-			}else {
-				var_pos += 1;
-			}
-			vars++;
-		}
-		if (get_type(idx1) != get_type(fun_idx))
+		int idx = get_index_from_stack_index(var_num, $2);
+		if (get_type(idx) != get_type(fun_idx))
 			err("incompatibile types in return");
 		gen_mov($2, FUN_REG);
 		code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
@@ -442,23 +427,8 @@ return_statement
 		unsigned kind = get_kind($2);
 		if (kind == VAR) {
 			int index_on_stack = 0;
-			if (get_atr1($2) > 1) {
-				int vars = 1;
-				int var_pos = 1;
-				while (vars <= var_num) {
-					int idx1 = get_var_by_var_num(vars);
-					if (idx1 == $2) break;
-					else {
-						int atr2 = get_atr2(idx1);
-						if (atr2 != NO_ATR)	{
-							var_pos += atr2;
-						}else {
-							var_pos += 1;
-						}
-					}
-					vars++;
-				}
-				index_on_stack += var_pos;
+			if (get_atr1($2) > 1 && array_idx > 0) {
+				index_on_stack = get_variable_stack_position(var_num, $2);
 			}else {
 				index_on_stack += 1;
 			}
@@ -493,20 +463,7 @@ for_each
 			else {
 				int array_pos = 1;
 				if (get_atr1(arr_idx) > 1) {
-					int vars = 1;
-					while (vars <= var_num) {
-						int idx1 = get_var_by_var_num(vars);
-						if (idx1 == arr_idx) break;
-						else {
-							int atr2 = get_atr2(idx1);
-							if (atr2 != NO_ATR)	{
-								array_pos += atr2;
-							}else {
-								array_pos += 1;
-							}
-						}
-						vars++;
-					}
+					array_pos = get_variable_stack_position(var_num, arr_idx);
 				}
 				int i;
 				for (i = 0; i < get_atr2(arr_idx); i++) {
