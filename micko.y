@@ -23,8 +23,10 @@
   int array_elem_num = 0;
   int array_idx = 0;
   int arrays[1000];
+
+  int type_check_arrays = 0;
   int type_check = 0;
-  int array_type_check[1000];
+  int type_check_numexp[1000];
 
   int array_decl_cnt = 0;
   int array_decl_vars[1000];
@@ -250,6 +252,7 @@ assignment_statement
 		int index_on_stack = get_stack_position_of_array_element(var_num, idx, $3);
 		gen_mov($6, -index_on_stack);
 		type_check = 0;
+		type_check_arrays = 0;
 	}
   ;
 
@@ -259,7 +262,7 @@ num_exp
   | num_exp _AROP exp
       {
         int t1;   
-	if (type_check == 0) {
+	if (type_check_arrays == 0) {
 		if(get_type($1) != get_type($3))
           		err("invalid operands: arithmetic operation");
 		t1 = get_type($1);
@@ -268,14 +271,14 @@ num_exp
 		int errors = 0;
 		for (i = 0; i < type_check - 1; i++) {
 			for (j = i + 1; j < type_check; j++) {
-				if (get_type(array_type_check[i]) != get_type(array_type_check[j])) {
+				if (get_type(type_check_numexp[i]) != get_type(type_check_numexp[j])) {
 					errors++;
 					err("types not compatibile");
 				}
 			}	
 		}
 		if (errors == 0)
-			t1 = get_type(array_type_check[0]);
+			t1 = get_type(type_check_numexp[0]);
 	}        
         code("\n\t\t%s\t", ar_instructions[$2 + (t1 - 1) * AROP_NUMBER]);
         gen_sym_name($1);
@@ -292,7 +295,10 @@ num_exp
 
 exp
   : literal
-
+	{
+		type_check_numexp[type_check] = $1;
+		type_check++;
+	}
   | _ID
       {
         int idx = lookup_symbol($1, VAR|PAR);
@@ -301,20 +307,28 @@ exp
 	if (get_atr1(idx) > 1 && array_idx > 0) {
 		int var_pos = get_variable_stack_position(var_num, idx);
 		$$ = -var_pos;
+		type_check_arrays++;
 	}else {
 		$$ = idx;
-	}       
+	}
+	type_check_numexp[type_check] = idx;
+	type_check++;       
       }
 
   | function_call
       {
-        $$ = take_reg();
-        gen_mov(FUN_REG, $$);
+        int taken_reg = take_reg();
+        gen_mov(FUN_REG, taken_reg);
+	type_check_numexp[type_check] = taken_reg;
+      	type_check++;
+	$$ = taken_reg;
       }
   
   | _LPAREN num_exp _RPAREN
-      { $$ = $2; 
-	type_check = 0;
+      { 
+	type_check_numexp[type_check] = $2;
+	type_check++;
+	$$ = $2;
       }
   | _ID _SLBRACKET literal _SRBRACKET
 	{
@@ -325,8 +339,9 @@ exp
 			err("index out of range");
 		int index_on_stack = get_stack_position_of_array_element(var_num, arr_idx, $3);
 		$$ = -index_on_stack;
-		array_type_check[type_check] = arr_idx;
+		type_check_numexp[type_check] = arr_idx;
 		type_check++;
+		type_check_arrays++;
 	}
   ;
 
@@ -363,8 +378,15 @@ argument
 
   | num_exp
     { 
-      if(get_atr2(fcall_idx) != get_type($1))
-        err("incompatible type for argument");
+	if ($1 < 0) {
+		int idx = get_index_from_stack_index(var_num, $1);
+		if(get_atr2(fcall_idx) != get_type(idx))
+        		err("incompatible type for argument");
+	}
+	else {
+		if(get_atr2(fcall_idx) != get_type($1))
+        		err("incompatible type for argument");
+	}
       free_if_reg($1);
       code("\n\t\t\tPUSH\t");
       gen_sym_name($1);
@@ -403,14 +425,25 @@ rel_exp
   : num_exp 
 	{
 		type_check = 0;
+		type_check_arrays = 0;
 	}
    _RELOP num_exp
       {
-        if(get_type($1) != get_type($4))
+	int idx1, idx2;
+	if ($1 < 0)	
+		idx1 = get_index_from_stack_index(var_num, $1);
+	else
+		idx1 = $1;
+	if ($4 < 0)
+		idx2 = get_index_from_stack_index(var_num, $4);
+	else
+		idx2 = $4;
+        if(get_type(idx1) != get_type(idx2))
           err("invalid operands: relational operator");
-        $$ = $3 + ((get_type($1) - 1) * RELOP_NUMBER);
+        $$ = $3 + ((get_type(idx1) - 1) * RELOP_NUMBER);
         gen_cmp($1, $4);
 	type_check = 0;
+	type_check_arrays = 0;
       }
   ;
 
@@ -444,7 +477,8 @@ return_statement
 			code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
 		}	  
 	}
-	      
+	type_check = 0;
+	type_check_arrays = 0;    
       }
   ;
 
