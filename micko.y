@@ -1,6 +1,8 @@
 %{
   #include <stdio.h>
   #include <stdlib.h>
+  #include <math.h>
+  #include <string.h>
   #include "defs.h"
   #include "symtab.h"
   #include "codegen.h"
@@ -22,14 +24,21 @@
 
   int array_elem_num = 0;
   int array_idx = 0;
-  int arrays[1000];
+  int arrays[100];
 
   int type_check_arrays = 0;
   int type_check = 0;
-  int type_check_numexp[1000];
+  int type_check_numexp[100];
 
   int array_decl_cnt = 0;
-  int array_decl_vars[1000];
+  int array_decl_vars[100];
+
+  int is_callback = 0;
+  int callback_idx = 0;
+  int cb_param = 0;
+  int primary_func_idx[100];
+  int cb_func_idx[100];
+  float arguments[100] = {[0 ... 99] = INFINITY};
   FILE *output;
 %}
 
@@ -58,6 +67,7 @@
 %token _FOREACH
 %token <i> _AROP
 %token <i> _RELOP
+%token _CALLBACK
 
 %type <i> num_exp exp literal
 %type <i> function_call argument rel_exp if_part
@@ -97,7 +107,8 @@ function
       {
         clear_symbols(fun_idx + 1);
         var_num = 0;
-        
+	
+	callback_idx++;  
         code("\n@%s_exit:", $2);
         code("\n\t\tMOV \t%%14,%%15");
         code("\n\t\tPOP \t%%14");
@@ -115,6 +126,12 @@ parameter
         set_atr1(fun_idx, 1);
         set_atr2(fun_idx, $1);
       }
+  | _CALLBACK
+	{
+		set_atr1(fun_idx, 1);
+		set_atr2(fun_idx, VOID);
+		primary_func_idx[callback_idx] = fun_idx;
+	}
   ;
 
 body
@@ -217,6 +234,7 @@ statement
   | if_statement
   | return_statement
   | for_each
+  | callback_statement
   ;
 
 compound_statement
@@ -301,18 +319,32 @@ exp
 	}
   | _ID
       {
-        int idx = lookup_symbol($1, VAR|PAR);
-	if(idx == NO_INDEX)
-          err("'%s' undeclared", $1);
-	if (get_atr1(idx) > 1 && array_idx > 0) {
-		int var_pos = get_variable_stack_position(var_num, idx);
-		$$ = -var_pos;
-		type_check_arrays++;
-	}else {
+	if (cb_param == 1) {
+		int idx = lookup_symbol($1, FUN);
+		if (idx == NO_INDEX)
+			err("function undeclared: %s", $1);
+		if (get_type(idx) != VOID)
+			err("callback function must be void type: %s", $1);
+		int i;
+		for (i = 0; i < callback_idx; i++) {
+			if (primary_func_idx[i] == fcall_idx)
+				cb_func_idx[i] = idx;
+		}
 		$$ = idx;
-	}
-	type_check_numexp[type_check] = idx;
-	type_check++;       
+	}else {
+		int idx = lookup_symbol($1, VAR|PAR);
+		if(idx == NO_INDEX)
+		  err("'%s' undeclared", $1);
+		if (get_atr1(idx) > 1 && array_idx > 0) {
+			int var_pos = get_variable_stack_position(var_num, idx);
+			$$ = -var_pos;
+			type_check_arrays++;
+		}else {
+			$$ = idx;
+		}
+		type_check_numexp[type_check] = idx;
+		type_check++; 
+	}      
       }
 
   | function_call
@@ -359,15 +391,19 @@ function_call
         fcall_idx = lookup_symbol($1, FUN);
         if(fcall_idx == NO_INDEX)
           err("'%s' is not a function", $1);
+	if(get_atr2(fcall_idx) == VOID) {
+		cb_param = 1;
+	}
       }
     _LPAREN argument _RPAREN
       {
         if(get_atr1(fcall_idx) != $4)
           err("wrong number of arguments");
         code("\n\t\tCALL\t%s", get_name(fcall_idx));
-        if($4 > 0)
+        if($4 > 0 && cb_param == 0)
           code("\n\t\t\tADDS\t%%15,$%d,%%15", $4 * 4);
         set_type(FUN_REG, get_type(fcall_idx));
+	cb_param = 0;
         $$ = FUN_REG;
       }
   ;
@@ -378,19 +414,34 @@ argument
 
   | num_exp
     { 
-	if ($1 < 0) {
-		int idx = get_index_from_stack_index(var_num, $1);
-		if(get_atr2(fcall_idx) != get_type(idx))
-        		err("incompatible type for argument");
+	if (is_callback == 1) {
+		int idx = $1;
+		if ($1 < 0 || $1 > 13) {
+			int reg = take_reg();
+			gen_mov(idx, reg);
+			idx = reg;
+		}
+		arguments[callback_idx] = idx;	
+		$$ = 1;
+	}else {
+		if ($1 < 0) {
+			int idx = get_index_from_stack_index(var_num, $1);
+			if(get_atr2(fcall_idx) != get_type(idx))
+				err("incompatible type for argument");
+		}
+		else {
+			if(get_atr2(fcall_idx) != get_type($1))
+				err("incompatible type for argument");
+		}
+		if (cb_param == 1) {
+			$$ = 1;
+		}else {
+			free_if_reg($1);
+		      	code("\n\t\tPUSH\t");
+		      	gen_sym_name($1);
+			$$ = 1;
+		}
 	}
-	else {
-		if(get_atr2(fcall_idx) != get_type($1))
-        		err("incompatible type for argument");
-	}
-      free_if_reg($1);
-      code("\n\t\t\tPUSH\t");
-      gen_sym_name($1);
-      $$ = 1;
     }
   ;
 
@@ -455,6 +506,9 @@ return_statement
 		if (get_type(idx) != get_type(fun_idx))
 			err("incompatibile types in return");
 		gen_mov($2, FUN_REG);
+		if (strcmp("main", get_name(fun_idx)) == 0) {
+			generate_callback_call(cb_func_idx, arguments, callback_idx);
+		}			
 		code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
 	} else {
 		unsigned kind = get_kind($2);
@@ -468,12 +522,18 @@ return_statement
 			if(get_type(fun_idx) != get_type($2))
 		  		err("incompatible types in return");
 			gen_mov(-index_on_stack, FUN_REG);
+			if (strcmp("main", get_name(fun_idx)) == 0) {
+				generate_callback_call(cb_func_idx, arguments, callback_idx);
+			}
 			code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));	
 		}
 		else {
 			if(get_type(fun_idx) != get_type($2))
 		 	 	err("incompatible types in return");
 			gen_mov($2, FUN_REG);
+			if (strcmp("main", get_name(fun_idx)) == 0) {
+				generate_callback_call(cb_func_idx, arguments, callback_idx);
+			}
 			code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
 		}	  
 	}
@@ -510,6 +570,17 @@ for_each
 			}
 		}
 		
+	}
+  ;
+
+callback_statement
+  : _CALLBACK 
+   	{
+		is_callback = 1;
+	}
+   _LPAREN argument _RPAREN _SEMICOLON
+	{
+		is_callback = 0;
 	}
   ;
 

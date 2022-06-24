@@ -23,4 +23,10 @@ int get_stack_position_of_array_element(int var_num, int idx, int literal_idx);
 
 int get_variable_stack_position(int var_num, int idx);
 
+void generate_callback_call_parameter(int cb_idx, float arg);
+
+void generate_callback_call_no_param(int cb_idx);
+
+void generate_callback_call(int cb_func_idx[], float arguments[], int callback_idx);
+
 #endif

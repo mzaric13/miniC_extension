@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "codegen.h"
 #include "symtab.h"
 
@@ -122,5 +123,37 @@ int get_variable_stack_position(int var_num, int idx) {
 		vars++;
 	}
 	return var_pos;
+}
+
+void generate_callback_call_parameter(int cb_idx, float arg) {
+	free_if_reg((int)arg);
+	code("\n\t\tPUSH\t");
+	gen_sym_name((int)arg);
+	code("\n\t\tCALL\t%s", get_name(cb_idx));
+	code("\n\t\tADDS\t%%15,$%d,%%15",  4);
+}
+
+void generate_callback_call_no_param(int cb_idx) {
+	code("\n\t\tCALL\t%s", get_name(cb_idx));
+}
+
+void generate_callback_call(int cb_func_idx[], float arguments[], int callback_idx) {
+	int i;
+	for (i = 0; i < callback_idx; i++) {
+		if (cb_func_idx[i] != 0) {
+			if (get_atr1(cb_func_idx[i]) == 1) {
+				if (arguments[i] == INFINITY)
+					err("no argument for callback function");
+				else {
+					generate_callback_call_parameter(cb_func_idx[i], arguments[i]);
+				}
+			}else {
+				if (arguments[i] == INFINITY) {
+					generate_callback_call_no_param(cb_func_idx[i]);
+				}else
+					err("argument given for function without argument");
+			}
+		}
+	}
 }
 

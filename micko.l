@@ -12,10 +12,12 @@
 
 "int"                { yylval.i = INT;  return _TYPE; }
 "unsigned"           { yylval.i = UINT; return _TYPE; }
+"void"			{ yylval.i = VOID; return _TYPE; }
 "if"                 { return _IF; }
 "else"               { return _ELSE; }
 "return"             { return _RETURN; }
 "forEach"		{ return _FOREACH; }
+"callback"		{ return _CALLBACK; }
 
 "("                  { return _LPAREN; }
 ")"                  { return _RPAREN; }
