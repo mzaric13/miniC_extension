@@ -32,6 +32,8 @@
 
   int array_decl_cnt = 0;
   int array_decl_vars[100];
+  int array_decl_idx = 0;
+  int arrays_decl[100];
 
   int is_callback = 0;
   int callback_idx = 0;
@@ -39,6 +41,7 @@
   int primary_func_idx[100];
   int cb_func_idx[100];
   float arguments[100] = {[0 ... 99] = INFINITY};
+  int gen_cb_idx = -1;
   FILE *output;
 %}
 
@@ -149,9 +152,9 @@ body
 			i = 0;
 			int j = 0;
 			int k = 0;
-			while(i < array_idx) {
-				int arr_idx = get_variable_stack_position(var_num, arrays[i]);
-				while (j < get_atr2(arrays[i]) && j + k < array_decl_cnt) {
+			while(i < array_decl_idx) {
+				int arr_idx = get_variable_stack_position(var_num, arrays_decl[i]);
+				while (j < get_atr2(arrays_decl[i]) && j + k < array_decl_cnt) {
 					gen_mov(array_decl_vars[j + k], -(arr_idx + j));
 					j++;
 				}
@@ -169,6 +172,7 @@ body
     statement_list _RBRACKET
 	{
 		array_idx = 0;
+		array_decl_idx = 0;
 	}
   ;
 
@@ -203,6 +207,8 @@ variable
 		else
 			err("redefinition of '%s'", $2);
 		arrays[array_idx] = idx;
+		arrays_decl[array_decl_idx] = idx;
+		array_decl_idx++;
 		array_idx++;
 		array_elem_num = 0;
 	}
@@ -256,6 +262,7 @@ assignment_statement
 	}else 
         	gen_mov($3, idx);
 	type_check = 0;
+	type_check_arrays = 0;
       }
   | _ID _SLBRACKET literal _SRBRACKET _ASSIGN num_exp _SEMICOLON
 	{
@@ -286,17 +293,15 @@ num_exp
 		t1 = get_type($1);
 	}else {
 		int i, j;
-		int errors = 0;
 		for (i = 0; i < type_check - 1; i++) {
 			for (j = i + 1; j < type_check; j++) {
 				if (get_type(type_check_numexp[i]) != get_type(type_check_numexp[j])) {
-					errors++;
 					err("types not compatibile");
+					
 				}
 			}	
 		}
-		if (errors == 0)
-			t1 = get_type(type_check_numexp[0]);
+		t1 = get_type(type_check_numexp[0]);
 	}        
         code("\n\t\t%s\t", ar_instructions[$2 + (t1 - 1) * AROP_NUMBER]);
         gen_sym_name($1);
@@ -327,8 +332,12 @@ exp
 			err("callback function must be void type: %s", $1);
 		int i;
 		for (i = 0; i < callback_idx; i++) {
-			if (primary_func_idx[i] == fcall_idx)
+			if (primary_func_idx[i] == fcall_idx) {
 				cb_func_idx[i] = idx;
+				gen_cb_idx = i;
+				break;
+			}
+			
 		}
 		$$ = idx;
 	}else {
@@ -351,6 +360,8 @@ exp
       {
         int taken_reg = take_reg();
         gen_mov(FUN_REG, taken_reg);
+	if (cb_param == 1) generate_callback_call(cb_func_idx, arguments, gen_cb_idx);
+	cb_param = 0;
 	type_check_numexp[type_check] = taken_reg;
       	type_check++;
 	$$ = taken_reg;
@@ -403,7 +414,6 @@ function_call
         if($4 > 0 && cb_param == 0)
           code("\n\t\t\tADDS\t%%15,$%d,%%15", $4 * 4);
         set_type(FUN_REG, get_type(fcall_idx));
-	cb_param = 0;
         $$ = FUN_REG;
       }
   ;
@@ -507,7 +517,7 @@ return_statement
 			err("incompatibile types in return");
 		gen_mov($2, FUN_REG);
 		if (strcmp("main", get_name(fun_idx)) == 0) {
-			generate_callback_call(cb_func_idx, arguments, callback_idx);
+			//generate_callback_call(cb_func_idx, arguments, callback_idx);
 		}			
 		code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
 	} else {
@@ -523,7 +533,7 @@ return_statement
 		  		err("incompatible types in return");
 			gen_mov(-index_on_stack, FUN_REG);
 			if (strcmp("main", get_name(fun_idx)) == 0) {
-				generate_callback_call(cb_func_idx, arguments, callback_idx);
+				//generate_callback_call(cb_func_idx, arguments, callback_idx);
 			}
 			code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));	
 		}
@@ -532,7 +542,7 @@ return_statement
 		 	 	err("incompatible types in return");
 			gen_mov($2, FUN_REG);
 			if (strcmp("main", get_name(fun_idx)) == 0) {
-				generate_callback_call(cb_func_idx, arguments, callback_idx);
+				//generate_callback_call(cb_func_idx, arguments, callback_idx);
 			}
 			code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
 		}	  
@@ -581,6 +591,8 @@ callback_statement
    _LPAREN argument _RPAREN _SEMICOLON
 	{
 		is_callback = 0;
+		type_check = 0;
+		type_check_arrays = 0;
 	}
   ;
 

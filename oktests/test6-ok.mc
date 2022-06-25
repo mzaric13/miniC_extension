@@ -1,3 +1,4 @@
+//OPIS: slozeniji primer sa nizovima i forEach
 //RETURN: 58
 
 int func1(int a) {
