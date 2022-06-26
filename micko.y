@@ -42,6 +42,7 @@
   int cb_func_idx[100];
   float arguments[100] = {[0 ... 99] = INFINITY};
   int gen_cb_idx = -1;
+
   FILE *output;
 %}
 
@@ -515,10 +516,7 @@ return_statement
 		int idx = get_index_from_stack_index(var_num, $2);
 		if (get_type(idx) != get_type(fun_idx))
 			err("incompatibile types in return");
-		gen_mov($2, FUN_REG);
-		if (strcmp("main", get_name(fun_idx)) == 0) {
-			//generate_callback_call(cb_func_idx, arguments, callback_idx);
-		}			
+		gen_mov($2, FUN_REG);			
 		code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
 	} else {
 		unsigned kind = get_kind($2);
@@ -532,18 +530,12 @@ return_statement
 			if(get_type(fun_idx) != get_type($2))
 		  		err("incompatible types in return");
 			gen_mov(-index_on_stack, FUN_REG);
-			if (strcmp("main", get_name(fun_idx)) == 0) {
-				//generate_callback_call(cb_func_idx, arguments, callback_idx);
-			}
 			code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));	
 		}
 		else {
 			if(get_type(fun_idx) != get_type($2))
 		 	 	err("incompatible types in return");
 			gen_mov($2, FUN_REG);
-			if (strcmp("main", get_name(fun_idx)) == 0) {
-				//generate_callback_call(cb_func_idx, arguments, callback_idx);
-			}
 			code("\n\t\tJMP \t@%s_exit", get_name(fun_idx));
 		}	  
 	}

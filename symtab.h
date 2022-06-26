@@ -60,4 +60,10 @@ int get_var_by_var_num(int var_num);
 // vraca indeks u tabeli na osnovu indeksa na steku
 int get_index_from_stack_index(int var_num, int stack_index);
 
+// vraca poziciju elementa niza na steku
+int get_stack_position_of_array_element(int var_num, int idx, int literal_idx);
+
+// vraca poziciju promenljive na steku
+int get_variable_stack_position(int var_num, int idx);
+
 #endif
